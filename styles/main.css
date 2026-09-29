@@ -1,0 +1,75 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Yu Gothic UI", "Meiryo", sans-serif;
+  background: #0b1219;
+  color: #eff7f5;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px 18px;
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(50, 90, 88, 0.22), transparent 58%),
+    #0b1219;
+}
+
+.game-shell {
+  width: min(100%, 960px);
+}
+
+.page-heading {
+  margin: 0 0 18px;
+}
+
+.page-heading .eyebrow {
+  margin: 0 0 8px;
+  color: #70e1c1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: 0.02em;
+}
+
+.page-heading > p:last-child,
+.game-shell footer {
+  color: #a7b9b8;
+  font-size: 14px;
+}
+
+.page-heading > p:last-child {
+  margin: 8px 0 0;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(150, 184, 185, 0.24);
+  border-radius: 12px;
+  background: #101923;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+canvas:focus-visible {
+  outline: 2px solid #70e1c1;
+  outline-offset: 4px;
+}
+
+.game-shell footer {
+  margin-top: 14px;
+  text-align: center;
+}
