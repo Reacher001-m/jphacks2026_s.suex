@@ -89,7 +89,9 @@ export default class InputHandler {
       const directionAlreadyPressed = [...this.pressedKeys].some((pressedKey) => (
         pressedKey !== key && MOVEMENT_KEYS[pressedKey] === direction
       ));
-      if (isNewPress && !directionAlreadyPressed) this.onMove(direction, true, event);
+      if (isNewPress && !directionAlreadyPressed && !event.repeat) {
+        this.onMove(direction, true, event);
+      }
     }
 
     const shortcutModifierPressed = this.platform === 'mac' ? event.metaKey : event.ctrlKey;

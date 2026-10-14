@@ -1,5 +1,7 @@
 import InputHandler from '../core/InputHandler.js';
+import StageManager from '../core/StageManager.js';
 import BossQuizScene from './BossQuizScene.js';
+import STAGES from '../data/stages.js';
 
 const COLORS = {
   background: '#101923',
@@ -31,41 +33,21 @@ export default class MainGameScene {
 
     this.width = canvas.width;
     this.height = canvas.height;
+    this.tileSize = 40;
+    this.stageManager = new StageManager(STAGES);
+    this.stage = this.stageManager.current;
     this.player = {
-      x: this.width / 2,
-      y: this.height / 2,
+      x: (this.stage.start.x + 0.5) * this.tileSize,
+      y: (this.stage.start.y + 0.5) * this.tileSize,
       radius: 13,
-      speed: 220,
+      facing: this.stage.start.facing,
       hp: 2,
       maxHp: 3,
       skillEnergy: 1,
     };
     this.inventory = { skillPotion: 0, lifePotion: 0 };
-    this.movement = new Set();
-    this.tileSize = 40;
-    this.obstacles = [
-      { x: 7, y: 4, width: 1, height: 5 },
-      { x: 4, y: 10, width: 5, height: 1 },
-      { x: 16, y: 3, width: 3, height: 1 },
-      { x: 17, y: 11, width: 4, height: 1 },
-      { x: 2, y: 5, width: 2, height: 1 },
-    ];
-    this.items = [
-      { type: 'skillPotion', x: 6, y: 5, collected: false },
-      { type: 'lifePotion', x: 5, y: 12, collected: false },
-    ];
-    this.gimmicks = [
-      {
-        type: 'copyDoor', x: 13, y: 7, width: 1, height: 5,
-        action: 'copy', label: 'Ctrl+C', description: 'コピー扉', solved: false,
-      },
-      {
-        type: 'pasteBridge', x: 16, y: 7, width: 3, height: 1,
-        action: 'paste', label: 'Ctrl+V', description: '橋のギャップ', solved: false,
-      },
-    ];
-    this.goal = { x: 21, y: 2, radius: 19 };
-    this.lastShortcutMessage = '移動: 矢印キー / WASD';
+    this.loadStage(this.stage);
+    this.lastShortcutMessage = '矢印キー / WASD で1マスずつ移動';
 
     this.input = new InputHandler({
       onMove: (direction, pressed) => this.handleMove(direction, pressed),
@@ -85,72 +67,185 @@ export default class MainGameScene {
   };
 
   handleMove(direction, pressed) {
-    if (pressed) this.movement.add(direction);
-    else this.movement.delete(direction);
-  }
+    if (!pressed || this.bossQuiz.active) return;
 
-  handleShortcut({ action, modifier }) {
-    const labels = {
-      copy: 'コピー',
-      paste: '貼り付け',
-      cut: '切り取り',
-      undo: '元に戻す',
-      redo: 'やり直し',
-      selectAll: 'すべて選択',
-      save: '保存',
-      print: '印刷',
+    const offsets = {
+      up: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
     };
-    const nearbyGimmick = this.gimmicks.find((gimmick) => (
-      !gimmick.solved && this.isNearGimmick(gimmick)
-    ));
+    const offset = offsets[direction];
+    if (!offset) return;
 
-    if (nearbyGimmick) {
-      if (nearbyGimmick.action !== action) {
-        this.lastShortcutMessage = `${nearbyGimmick.description}: ${nearbyGimmick.label} を入力してください`;
-        return;
-      }
-      if (this.player.skillEnergy <= 0) {
-        this.lastShortcutMessage = 'スキルエナジー不足です。青いポーションを探そう';
-        return;
-      }
-
-      this.player.skillEnergy -= 1;
-      nearbyGimmick.solved = true;
-      const modifierLabel = modifier === 'Meta' ? 'Cmd' : 'Ctrl';
-      this.lastShortcutMessage = `${modifierLabel}+${action.toUpperCase()} 成功！${nearbyGimmick.description}を解除`;
+    this.player.facing = direction;
+    const tile = this.getPlayerTile();
+    const nextX = tile.x + offset.x;
+    const nextY = tile.y + offset.y;
+    if (!this.canOccupy(nextX, nextY)) {
+      this.lastShortcutMessage = 'そのマスには進めません';
       return;
     }
 
-    this.lastShortcutMessage = `${modifier}+キーを検知: ${labels[action] ?? action}`;
-  }
-
-  isNearGimmick(gimmick) {
-    const left = gimmick.x * this.tileSize;
-    const top = gimmick.y * this.tileSize;
-    const right = left + gimmick.width * this.tileSize;
-    const bottom = top + gimmick.height * this.tileSize;
-    const nearestX = Math.max(left, Math.min(this.player.x, right));
-    const nearestY = Math.max(top, Math.min(this.player.y, bottom));
-    return Math.hypot(this.player.x - nearestX, this.player.y - nearestY) < 82;
-  }
-
-  update(deltaTime) {
-    if (this.bossQuiz.active) return;
+    this.recordUndo();
+    this.player.x = (nextX + 0.5) * this.tileSize;
+    this.player.y = (nextY + 0.5) * this.tileSize;
     this.collectNearbyItems();
-    let horizontal = 0;
-    let vertical = 0;
-    if (this.movement.has('left')) horizontal -= 1;
-    if (this.movement.has('right')) horizontal += 1;
-    if (this.movement.has('up')) vertical -= 1;
-    if (this.movement.has('down')) vertical += 1;
+    this.checkGoal();
+  }
 
-    if (horizontal === 0 && vertical === 0) return;
+  handleShortcut({ action, modifier }) {
+    if (action === 'undo') {
+      this.undo();
+      return;
+    }
+    if (action === 'redo') {
+      this.redo();
+      return;
+    }
 
-    const magnitude = Math.hypot(horizontal, vertical);
-    const distance = this.player.speed * deltaTime / magnitude;
-    this.moveAxis(horizontal * distance, 0);
-    if (this.bossQuiz.active) return;
-    this.moveAxis(0, vertical * distance);
+    const target = this.getTargetTile();
+    const blockIndex = this.blocks.findIndex((block) => block.x === target.x && block.y === target.y);
+    const block = this.blocks[blockIndex];
+    const modifierLabel = modifier === 'Meta' ? 'Cmd' : 'Ctrl';
+
+    if (action === 'copy' || action === 'cut') {
+      if (!block) {
+        this.lastShortcutMessage = `${modifierLabel}+${action === 'copy' ? 'C' : 'X'}: 前方に操作可能なブロックがありません`;
+        return;
+      }
+      this.recordUndo();
+      this.clipboard = { ...block };
+      if (action === 'cut') this.blocks.splice(blockIndex, 1);
+      if (action === 'copy' && this.stage.shortcutGate) this.shortcutGateOpen = true;
+      this.lastShortcutMessage = action === 'copy'
+        ? `${block.name}をコピーしました${this.shortcutGateOpen ? '。裏道ゲートが開きました' : ''}`
+        : `${block.name}を切り取りました`;
+      return;
+    }
+
+    if (action === 'paste') {
+      if (!this.clipboard) {
+        this.lastShortcutMessage = 'クリップボードにブロックがありません';
+        return;
+      }
+      if (!this.isEmptyFloor(target.x, target.y)) {
+        this.lastShortcutMessage = '前方が空きマスではないため配置できません';
+        return;
+      }
+      this.recordUndo();
+      this.blockIdSequence += 1;
+      this.blocks.push({ ...this.clipboard, id: `block-${this.blockIdSequence}`, x: target.x, y: target.y });
+      this.lastShortcutMessage = `${this.clipboard.name}を前方に配置しました`;
+      return;
+    }
+
+    this.lastShortcutMessage = `${modifierLabel}+${action.toUpperCase()} はブロック操作ではありません`;
+  }
+
+  getPlayerTile() {
+    return {
+      x: Math.floor(this.player.x / this.tileSize),
+      y: Math.floor(this.player.y / this.tileSize),
+    };
+  }
+
+  loadStage(stage) {
+    this.stage = stage;
+    this.obstacles = stage.obstacles.map((obstacle) => ({ ...obstacle }));
+    this.items = stage.items.map((item) => ({ ...item, collected: false }));
+    this.blocks = stage.blocks.map((block) => ({ ...block }));
+    this.initialBlocks = this.blocks.map((block) => ({ ...block }));
+    this.blockIdSequence = this.blocks.length;
+    this.goal = { ...stage.goal, radius: 19 };
+    this.shortcutGateOpen = false;
+    this.clipboard = null;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.player.x = (stage.start.x + 0.5) * this.tileSize;
+    this.player.y = (stage.start.y + 0.5) * this.tileSize;
+    this.player.facing = stage.start.facing;
+  }
+
+  getTargetTile() {
+    const tile = this.getPlayerTile();
+    const offsets = {
+      up: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+    };
+    const offset = offsets[this.player.facing];
+    return { x: tile.x + offset.x, y: tile.y + offset.y };
+  }
+
+  isFixedObstacle(tileX, tileY) {
+    const isWall = this.obstacles.some((obstacle) => (
+      tileX >= obstacle.x
+      && tileX < obstacle.x + obstacle.width
+      && tileY >= obstacle.y
+      && tileY < obstacle.y + obstacle.height
+    ));
+    const gate = this.stage.shortcutGate;
+    const isClosedGate = gate && !this.shortcutGateOpen && tileX === gate.x && tileY === gate.y;
+    return isWall || isClosedGate;
+  }
+
+  isEmptyFloor(tileX, tileY) {
+    const columns = this.width / this.tileSize;
+    const rows = this.height / this.tileSize;
+    if (tileX <= 0 || tileY <= 0 || tileX >= columns - 1 || tileY >= rows - 1) return false;
+    if (this.isFixedObstacle(tileX, tileY)) return false;
+    return !this.blocks.some((block) => block.x === tileX && block.y === tileY);
+  }
+
+  captureState() {
+    return {
+      x: this.player.x,
+      y: this.player.y,
+      facing: this.player.facing,
+      blocks: this.blocks.map((block) => ({ ...block })),
+      clipboard: this.clipboard ? { ...this.clipboard } : null,
+      shortcutGateOpen: this.shortcutGateOpen,
+    };
+  }
+
+  restoreState(state) {
+    this.player.x = state.x;
+    this.player.y = state.y;
+    this.player.facing = state.facing;
+    this.blocks = state.blocks.map((block) => ({ ...block }));
+    this.clipboard = state.clipboard ? { ...state.clipboard } : null;
+    this.shortcutGateOpen = state.shortcutGateOpen;
+  }
+
+  recordUndo() {
+    this.undoStack.push(this.captureState());
+    this.redoStack.length = 0;
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) {
+      this.lastShortcutMessage = '取り消せる操作がありません';
+      return;
+    }
+    this.redoStack.push(this.captureState());
+    this.restoreState(this.undoStack.pop());
+    this.lastShortcutMessage = '直前の操作を取り消しました';
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) {
+      this.lastShortcutMessage = 'やり直せる操作がありません';
+      return;
+    }
+    this.undoStack.push(this.captureState());
+    this.restoreState(this.redoStack.pop());
+    this.lastShortcutMessage = '操作をやり直しました';
+  }
+
+  update() {
+    if (!this.bossQuiz.active) this.collectNearbyItems();
   }
 
   collectNearbyItems() {
@@ -172,70 +267,51 @@ export default class MainGameScene {
     }
   }
 
-  moveAxis(deltaX, deltaY) {
-    const nextX = this.player.x + deltaX;
-    const nextY = this.player.y + deltaY;
-    if (this.canOccupy(nextX, nextY)) {
-      this.player.x = nextX;
-      this.player.y = nextY;
-      this.checkGoal();
-    }
-  }
-
   checkGoal() {
-    const goalX = (this.goal.x + 0.5) * this.tileSize;
-    const goalY = (this.goal.y + 0.5) * this.tileSize;
-    if (Math.hypot(this.player.x - goalX, this.player.y - goalY) > this.player.radius + this.goal.radius) return;
+    const tile = this.getPlayerTile();
+    if (tile.x !== this.goal.x || tile.y !== this.goal.y) return;
 
-    if (!this.gimmicks.every((gimmick) => gimmick.solved)) {
-      this.lastShortcutMessage = 'ゴールは封印中です。コピー扉と橋のギミックを解除しよう';
+    if (this.stage.goalBlock && !this.blocks.some((block) => (
+      block.x === this.stage.goalBlock.x && block.y === this.stage.goalBlock.y
+    ))) {
+      this.lastShortcutMessage = 'ゴールの紋章に木箱を配置してください';
       return;
     }
 
-    this.movement.clear();
+    const nextStage = this.stageManager.advance();
+    if (nextStage) {
+      this.loadStage(nextStage);
+      this.lastShortcutMessage = `STAGE ${nextStage.number}開始: ${nextStage.name}`;
+      return;
+    }
+
     this.input.setEnabled(false);
     this.bossQuiz.start();
   }
 
+  isGoalUnlocked() {
+    return !this.stage.goalBlock || this.blocks.some((block) => (
+      block.x === this.stage.goalBlock.x && block.y === this.stage.goalBlock.y
+    ));
+  }
+
   resetRun() {
     this.bossQuiz.stop();
-    this.player.x = this.width / 2;
-    this.player.y = this.height / 2;
     this.player.hp = this.player.maxHp;
     this.player.skillEnergy = 1;
     this.inventory.skillPotion = 0;
     this.inventory.lifePotion = 0;
-    this.items.forEach((item) => { item.collected = false; });
-    this.gimmicks.forEach((gimmick) => { gimmick.solved = false; });
-    this.movement.clear();
+    this.stage = this.stageManager.reset();
+    this.loadStage(this.stage);
     this.lastShortcutMessage = 'ダンジョンに再挑戦！青いポーションを回収しよう';
     this.input.setEnabled(true);
     this.canvas.focus({ preventScroll: true });
   }
 
-  canOccupy(x, y) {
-    const { radius } = this.player;
-    if (x - radius < this.tileSize || y - radius < this.tileSize
-      || x + radius > this.width - this.tileSize
-      || y + radius > this.height - this.tileSize) {
-      return false;
-    }
-
-    const blockingObjects = [
-      ...this.obstacles,
-      ...this.gimmicks.filter((gimmick) => !gimmick.solved),
-    ];
-    return !blockingObjects.some((obstacle) => {
-      const left = obstacle.x * this.tileSize;
-      const top = obstacle.y * this.tileSize;
-      const right = left + obstacle.width * this.tileSize;
-      const bottom = top + obstacle.height * this.tileSize;
-      const nearestX = Math.max(left, Math.min(x, right));
-      const nearestY = Math.max(top, Math.min(y, bottom));
-      const distanceX = x - nearestX;
-      const distanceY = y - nearestY;
-      return distanceX * distanceX + distanceY * distanceY < radius * radius;
-    });
+  canOccupy(tileX, tileY) {
+    if (!this.isEmptyFloor(tileX, tileY)) return false;
+    const goalTile = tileX === this.goal.x && tileY === this.goal.y;
+    return !goalTile || this.blocks.every((block) => block.x !== tileX || block.y !== tileY);
   }
 
   render() {
@@ -247,8 +323,11 @@ export default class MainGameScene {
     this.drawFloor(ctx);
     this.drawGoal(ctx);
     this.drawObstacles(ctx);
-    this.drawGimmicks(ctx);
+    this.drawShortcutGate(ctx);
+    this.drawGoalSocket(ctx);
+    this.drawBlocks(ctx);
     this.drawItems(ctx);
+    this.drawTargetCursor(ctx);
     this.drawHud(ctx);
     this.drawPlayer(ctx);
     this.bossQuiz.render(ctx, width, height);
@@ -257,19 +336,54 @@ export default class MainGameScene {
   drawGoal(ctx) {
     const x = (this.goal.x + 0.5) * this.tileSize;
     const y = (this.goal.y + 0.5) * this.tileSize;
-    const unlocked = this.gimmicks.every((gimmick) => gimmick.solved);
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, this.goal.radius, 0, Math.PI * 2);
-    ctx.fillStyle = unlocked ? 'rgba(112, 225, 193, 0.22)' : 'rgba(243, 201, 105, 0.14)';
+    ctx.fillStyle = this.isGoalUnlocked() ? 'rgba(112, 225, 193, 0.22)' : 'rgba(243, 201, 105, 0.14)';
     ctx.fill();
-    ctx.strokeStyle = unlocked ? '#70e1c1' : '#f3c969';
+    ctx.strokeStyle = this.isGoalUnlocked() ? '#70e1c1' : '#f3c969';
     ctx.lineWidth = 3;
     ctx.stroke();
-    ctx.fillStyle = unlocked ? '#70e1c1' : '#f3c969';
+    ctx.fillStyle = this.isGoalUnlocked() ? '#70e1c1' : '#f3c969';
     ctx.font = '700 11px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(unlocked ? 'GOAL' : 'LOCK', x, y + 4);
+    ctx.fillText(this.isGoalUnlocked() ? 'GOAL' : 'LOCK', x, y + 4);
+    ctx.restore();
+  }
+
+  drawShortcutGate(ctx) {
+    const gate = this.stage.shortcutGate;
+    if (!gate) return;
+    const x = gate.x * this.tileSize;
+    const y = gate.y * this.tileSize;
+    ctx.fillStyle = this.shortcutGateOpen ? 'rgba(112, 225, 193, 0.18)' : 'rgba(219, 125, 89, 0.35)';
+    ctx.fillRect(x + 3, y + 3, this.tileSize - 6, this.tileSize - 6);
+    ctx.strokeStyle = this.shortcutGateOpen ? COLORS.unlocked : COLORS.locked;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 4, y + 4, this.tileSize - 8, this.tileSize - 8);
+    ctx.fillStyle = this.shortcutGateOpen ? COLORS.unlocked : COLORS.locked;
+    ctx.font = '700 10px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.shortcutGateOpen ? 'OPEN' : 'COPY', x + this.tileSize / 2, y + this.tileSize / 2 + 3);
+    ctx.textAlign = 'left';
+  }
+
+  drawGoalSocket(ctx) {
+    if (!this.stage.goalBlock) return;
+    const x = this.stage.goalBlock.x * this.tileSize;
+    const y = this.stage.goalBlock.y * this.tileSize;
+    ctx.save();
+    ctx.strokeStyle = this.isGoalUnlocked() ? 'rgba(112, 225, 193, 0.35)' : 'rgba(243, 201, 105, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x + 5, y + 5, this.tileSize - 10, this.tileSize - 10);
+    ctx.setLineDash([]);
+    if (!this.isGoalUnlocked()) {
+      ctx.fillStyle = '#f3c969';
+      ctx.font = '700 9px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('PLACE', x + this.tileSize / 2, y + this.tileSize / 2 + 3);
+    }
     ctx.restore();
   }
 
@@ -314,37 +428,34 @@ export default class MainGameScene {
     }
   }
 
-  drawGimmicks(ctx) {
-    for (const gimmick of this.gimmicks) {
-      const x = gimmick.x * this.tileSize;
-      const y = gimmick.y * this.tileSize;
-      const width = gimmick.width * this.tileSize;
-      const height = gimmick.height * this.tileSize;
-      const color = gimmick.solved ? COLORS.unlocked : COLORS.locked;
-
-      if (gimmick.solved) {
-        ctx.save();
-        ctx.globalAlpha = 0.22;
-        ctx.fillStyle = COLORS.unlocked;
-        ctx.fillRect(x, y, width, height);
-        ctx.restore();
-        continue;
-      }
-
-      ctx.fillStyle = gimmick.type === 'copyDoor' ? '#613f3b' : '#17212b';
-      ctx.fillRect(x + 2, y + 2, width - 4, height - 4);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.setLineDash(gimmick.type === 'pasteBridge' ? [7, 5] : []);
-      ctx.strokeRect(x + 4, y + 4, width - 8, height - 8);
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = color;
-      ctx.font = '700 12px system-ui, sans-serif';
+  drawBlocks(ctx) {
+    for (const block of this.blocks) {
+      const x = block.x * this.tileSize;
+      const y = block.y * this.tileSize;
+      ctx.fillStyle = block.color;
+      ctx.fillRect(x + 4, y + 4, this.tileSize - 8, this.tileSize - 8);
+      ctx.strokeStyle = '#e8d1ae';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 7, y + 7, this.tileSize - 14, this.tileSize - 14);
+      ctx.fillStyle = '#fff7e9';
+      ctx.font = '700 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(gimmick.label, x + width / 2, y + height / 2 + 4);
-      ctx.textAlign = 'left';
+      ctx.fillText(block.name, x + this.tileSize / 2, y + this.tileSize / 2 + 4);
     }
+    ctx.textAlign = 'left';
+  }
+
+  drawTargetCursor(ctx) {
+    const target = this.getTargetTile();
+    const x = target.x * this.tileSize;
+    const y = target.y * this.tileSize;
+    ctx.save();
+    ctx.fillStyle = 'rgba(112, 225, 193, 0.08)';
+    ctx.fillRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+    ctx.strokeStyle = 'rgba(172, 255, 226, 0.78)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 3, y + 3, this.tileSize - 6, this.tileSize - 6);
+    ctx.restore();
   }
 
   drawItems(ctx) {
@@ -382,7 +493,7 @@ export default class MainGameScene {
     ctx.textAlign = 'right';
     ctx.fillStyle = COLORS.accent;
     ctx.font = '600 15px system-ui, sans-serif';
-    ctx.fillText('STAGE 1', this.width - 58, 30);
+    ctx.fillText(`STAGE ${this.stage.number}/${this.stageManager.total}`, this.width - 58, 30);
     ctx.textAlign = 'left';
 
     ctx.fillStyle = 'rgba(8, 16, 22, 0.9)';
@@ -394,9 +505,11 @@ export default class MainGameScene {
     ctx.fillText(`スキル ${this.player.skillEnergy}`, 170, 64);
     ctx.fillStyle = COLORS.muted;
     ctx.fillText(`所持: 青ポーション ${this.inventory.skillPotion}  赤ポーション ${this.inventory.lifePotion}`, 290, 64);
+    ctx.fillStyle = COLORS.text;
+    ctx.fillText(`クリップボード: ${this.clipboard ? this.clipboard.name : '空'}`, 590, 64);
     ctx.fillStyle = COLORS.muted;
     ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText('青: エナジー+2   赤: HP+1   扉の近くで Ctrl+C / 橋の近くで Ctrl+V', 62, 81);
+    ctx.fillText(this.stage.hint, 62, 81);
 
     ctx.fillStyle = 'rgba(8, 16, 22, 0.88)';
     ctx.fillRect(48, this.height - 34, this.width - 96, 22);
@@ -404,7 +517,7 @@ export default class MainGameScene {
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillText(this.lastShortcutMessage, 58, this.height - 19);
     ctx.textAlign = 'right';
-    ctx.fillText('矢印キー / WASD で移動', this.width - 58, this.height - 19);
+    ctx.fillText('Ctrl+Z Undo / Ctrl+Y Redo', this.width - 58, this.height - 19);
     ctx.textAlign = 'left';
   }
 
@@ -428,6 +541,5 @@ export default class MainGameScene {
     this.input.detach();
     this.bossQuiz.dispose();
     this.canvas.removeEventListener('click', this.focusCanvas);
-    this.movement.clear();
   }
 }
