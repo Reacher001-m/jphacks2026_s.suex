@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "new-stage",
-  "number": 1,
+  "id": "sample",
+  "number": 3,
   "name": "新しいステージ",
   "start": {
     "x": 2,
