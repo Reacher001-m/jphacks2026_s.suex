@@ -1,0 +1,43 @@
+name: Validate stages and build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            editor/package-lock.json
+
+      - name: Install game dependencies
+        run: npm ci
+
+      - name: Validate stage JSON
+        run: npm run validate:stages
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build game
+        run: npm run build
+
+      - name: Install editor dependencies
+        working-directory: editor
+        run: npm ci
+
+      - name: Build editor
+        working-directory: editor
+        run: npm run build

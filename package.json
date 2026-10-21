@@ -1,0 +1,19 @@
+{
+  "name": "shortcut-dungeon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run validate:stages && vite build",
+    "preview": "vite preview",
+    "validate:stages": "node scripts/validate-stages.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@shortcut-dungeon/stage-schema": "file:packages/stage-schema"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "shortcut-dungeon-editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@shortcut-dungeon/stage-schema": "file:../packages/stage-schema"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

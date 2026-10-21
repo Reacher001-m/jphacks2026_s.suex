@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1219">
+    <title>ステージエディタ | ショートカット・ダンジョン</title>
+    <link rel="stylesheet" href="./src/styles.css">
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <p class="eyebrow">SHORTCUT DUNGEON</p>
+        <h1>ステージエディタ</h1>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="button ghost" id="new-button">新規</button>
+        <button type="button" class="button ghost" id="import-button">読み込み</button>
+        <button type="button" class="button ghost" id="copy-button">JSONをコピー</button>
+        <button type="button" class="button primary" id="export-button">JSONを保存</button>
+        <button type="button" class="button ghost" id="preview-button">プレビュー</button>
+      </div>
+      <input type="file" id="file-input" accept="application/json,.json" hidden>
+    </header>
+
+    <main class="editor-layout">
+      <aside class="panel palette" aria-label="配置ツール">
+        <h2>ツール</h2>
+        <div class="tool-list" role="group" aria-label="配置する要素">
+          <button type="button" class="tool" data-tool="select"><span class="tool-key">1</span>選択</button>
+          <button type="button" class="tool" data-tool="wall"><span class="tool-key">2</span>固定壁</button>
+          <button type="button" class="tool" data-tool="erase"><span class="tool-key">3</span>削除</button>
+          <button type="button" class="tool" data-tool="start"><span class="tool-key">4</span>開始位置</button>
+          <button type="button" class="tool" data-tool="goal"><span class="tool-key">5</span>ゴール</button>
+          <button type="button" class="tool" data-tool="goalBlock"><span class="tool-key">6</span>goalBlock</button>
+          <button type="button" class="tool" data-tool="gate"><span class="tool-key">7</span>コピーゲート</button>
+          <button type="button" class="tool" data-tool="block"><span class="tool-key">8</span>木箱</button>
+          <button type="button" class="tool" data-tool="skillPotion"><span class="tool-key">9</span><span class="swatch skill"></span>スキルポーション</button>
+          <button type="button" class="tool" data-tool="lifePotion"><span class="tool-key">0</span><span class="swatch life"></span>ライフポーション</button>
+        </div>
+
+        <section class="panel-section">
+          <h2>操作</h2>
+          <dl class="shortcut-list">
+            <div><dt>選択・移動</dt><dd>選択ツールでドラッグ</dd></div>
+            <div><dt>連続配置</dt><dd>壁・削除・木箱・アイテムはドラッグ</dd></div>
+            <div><dt>削除</dt><dd>右クリック / Delete</dd></div>
+            <div><dt>移動</dt><dd>矢印キー</dd></div>
+            <div><dt>戻す / やり直す</dt><dd>Ctrl/Cmd+Z / Y</dd></div>
+            <div><dt>保存</dt><dd>Ctrl/Cmd+S</dd></div>
+          </dl>
+        </section>
+      </aside>
+
+      <section class="canvas-column" aria-label="ステージ編集">
+        <div class="canvas-toolbar">
+          <div class="toolbar-left">
+            <button type="button" class="button small" id="undo-button">元に戻す</button>
+            <button type="button" class="button small" id="redo-button">やり直す</button>
+          </div>
+          <div class="toolbar-right">
+            <span class="coordinate" id="coordinate">タイル: -</span>
+            <span class="mode-badge" id="mode-badge">編集</span>
+          </div>
+        </div>
+
+        <div class="canvas-frame" id="canvas-frame">
+          <canvas
+            id="editor-canvas"
+            width="960"
+            height="640"
+            tabindex="0"
+            aria-label="24列16行のステージ編集キャンバス"
+          ></canvas>
+        </div>
+
+        <div class="status-bar">
+          <span id="message" role="status" aria-live="polite"></span>
+          <span id="save-status" class="save-status">自動保存: 待機中</span>
+        </div>
+      </section>
+
+      <aside class="panel inspector" aria-label="ステージ情報と検証">
+        <section class="panel-section">
+          <h2>ステージ情報</h2>
+          <label class="field">
+            <span>ID <small>英小文字・数字・ハイフン</small></span>
+            <input type="text" id="stage-id" spellcheck="false" autocomplete="off">
+          </label>
+          <p class="file-name">ファイル名: <code id="file-name">new-stage.json</code></p>
+          <label class="field compact">
+            <span>番号</span>
+            <input type="number" id="stage-number" min="1" step="1">
+          </label>
+          <label class="field">
+            <span>ステージ名</span>
+            <input type="text" id="stage-name" maxlength="40">
+          </label>
+          <label class="field">
+            <span>ヒント <small id="hint-count">0 / 70</small></span>
+            <textarea id="stage-hint" rows="3" maxlength="70"></textarea>
+          </label>
+        </section>
+
+        <section class="panel-section" id="selection-panel">
+          <h2>選択中の要素</h2>
+          <p class="selection-label" id="selection-label">なにも選択されていません</p>
+
+          <div id="block-fields" hidden>
+            <label class="field">
+              <span>木箱の名前 <small>4文字以下推奨</small></span>
+              <input type="text" id="block-name" maxlength="8">
+            </label>
+            <label class="field compact">
+              <span>色</span>
+              <input type="color" id="block-color">
+            </label>
+          </div>
+
+          <div id="facing-field" hidden>
+            <label class="field">
+              <span>開始位置の向き</span>
+              <select id="facing-select">
+                <option value="up">上</option>
+                <option value="down">下</option>
+                <option value="left">左</option>
+                <option value="right">右</option>
+              </select>
+            </label>
+          </div>
+
+          <button type="button" class="button danger" id="delete-button">選択した要素を削除</button>
+        </section>
+
+        <section class="panel-section validation-section">
+          <h2>検証</h2>
+          <p class="validation-summary" id="validation-summary">問題ありません</p>
+          <ul class="validation-list" id="validation-list"></ul>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="app-footer">
+      <p>外周1マスは固定の壁です。配置できるのは x: 1〜22 / y: 1〜14 です。</p>
+      <p>保存したJSONを <code>src/data/stages/</code> に置くと、ビルド時に自動で追加されます。</p>
+    </footer>
+  </body>
+</html>

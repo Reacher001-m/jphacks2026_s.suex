@@ -7,7 +7,8 @@
 * **プラットフォーム**: PC（Windowsメイン、後日Mac対応を考慮してキー割り当ては拡張可能にする）
 * **推奨開発スタック**: HTML5 / JavaScript (ES6+) / HTML5 Canvas API（外部ライブラリなし、またはPhaser.js）
 
-  * VS Codeのみで開発・即時ブラウザ実行可能な構成とする。
+  * ビルドツールとしてViteを使用する（ゲーム・ステージエディタ共通）。
+  * VS Codeで開発し、`npm run dev` でブラウザ実行する構成とする。
 
 \---
 
@@ -114,3 +115,77 @@ Copilotがコードを生成・補完する際は、以下のルールを厳守�
 4. **コードの生成単位**:
 
    * 一度に巨大なファイルを生成せず、まずはクラス図やファイル構成を提示した上で、1ファイルずつ完結したクリーンなコードを出力すること。
+
+\---
+
+## 6\. 開発環境
+
+### 必要環境
+
+* Node.js 22 以上
+* npm
+
+### コマンド（ゲーム）
+
+```bash
+npm install       # 初回のみ
+npm run dev       # 開発サーバー
+npm run build     # ステージ検証 + 本番ビルド（dist/）
+npm run validate:stages
+npm test
+```
+
+### コマンド（ステージエディタ）
+
+```bash
+cd editor
+npm install       # 初回のみ
+npm run dev       # エディタの開発サーバー
+npm run build     # editor/dist/ に出力
+```
+
+### 主要ディレクトリ
+
+* `src/data/stages/` … ステージJSONの置き場。ここに置くだけでビルド時に自動検出される
+* `packages/stage-schema/` … ステージ仕様・バリデーション（ゲーム、エディタ、CIで共用）
+* `editor/` … ステージエディタ（ゲームとは独立したViteアプリ）
+* `scripts/validate-stages.mjs` … 全ステージJSONの検証
+* `docs/stage-editor-design.md` … エディタと自動取り込みの設計書
+
+\---
+
+## 7\. ステージ追加手順
+
+### 7.1 エディタで作成する
+
+1. `editor` で `npm run dev` を起動し、表示されたURLを開く
+2. ツールを選び、キャンバスへ壁・開始位置・ゴール・木箱・アイテムなどを配置する
+3. 右パネルに検証エラーがないことを確認する
+4. `JSONを保存` を押し、`{id}.json` をダウンロードする
+
+### 7.2 リポジトリへ追加する
+
+1. ダウンロードしたJSONを `src/data/stages/` に置く
+2. `git add src/data/stages/<id>.json`
+3. コミットして `main` へpushする
+4. Cloudflareが自動でビルドし、`number` の順にステージが追加される
+
+`src/data/stages.js` やゲーム本体のコードを編集する必要はない。
+
+### 7.3 ステージJSONのルール
+
+* ファイル名は `{id}.json`。`id` は作成後に変更しない
+* 配置可能範囲は `x: 1〜22`, `y: 1〜14`（外周1マスは固定の壁）
+* `number` は1以上で全ステージ内で一意。進行順になる
+* `goalBlock` と `shortcutGate` は不要なら `null`
+* 壁は `obstacles` の矩形で保存される（エディタが自動変換）
+* 仕様の詳細は `docs/stage-editor-design.md` を参照
+
+### 7.4 Cloudflare Pagesの設定
+
+| プロジェクト | Root directory | Build command | Output directory |
+|---|---|---|---|
+| ゲーム | `/` | `npm ci && npm run build` | `dist` |
+| エディタ | `editor` | `npm ci && npm run build` | `dist` |
+
+ゲームのビルドでは `npm run build` の前に全ステージJSONが検証される。不正なステージがあるとビルドは失敗し、本番へデプロイされない。
