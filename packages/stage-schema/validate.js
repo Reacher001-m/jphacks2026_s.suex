@@ -411,7 +411,8 @@ export function validateStage(stage, options = {}) {
     return { ok: false, errors, warnings };
   }
 
-  checkUnknownKeys(stage, STAGE_FIELDS, 'stage', errors);
+  const allowedFieldsWithOptional = [...STAGE_FIELDS, 'initialSkillPotions'];
+  checkUnknownKeys(stage, allowedFieldsWithOptional, 'stage', errors);
 
   for (const field of STAGE_FIELDS) {
     if (!hasOwn(stage, field)) {
@@ -445,6 +446,10 @@ export function validateStage(stage, options = {}) {
     addDiagnostic(errors, 'error', 'E001', 'hint は文字列である必要があります', { path: 'hint' });
   } else if ([...stage.hint].length > MAX_HINT_LENGTH) {
     addDiagnostic(warnings, 'warning', 'W004', `hint はHUD表示のため${MAX_HINT_LENGTH}文字以下を推奨します`, { path: 'hint' });
+  }
+
+  if (stage.initialSkillPotions !== undefined && (!Number.isInteger(stage.initialSkillPotions) || stage.initialSkillPotions < 0)) {
+    addDiagnostic(errors, 'error', 'E001', 'initialSkillPotions は0以上の整数である必要があります', { path: 'initialSkillPotions' });
   }
 
   const start = validateStart(stage.start, errors);

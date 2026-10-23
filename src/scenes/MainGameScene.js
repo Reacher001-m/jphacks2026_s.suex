@@ -167,10 +167,6 @@ export default class MainGameScene {
     window.removeEventListener('keydown', this.handleRetryKeyDown);
     this.gameOver = false;
     this.gameOverReason = '';
-    this.player.hp = this.player.maxHp;
-    this.player.skillEnergy = 1;
-    this.inventory.skillPotion = 0;
-    this.inventory.lifePotion = 0;
     this.loadStage(this.stage);
     this.lastShortcutMessage = `STAGE ${this.stage.number} に再挑戦！`;
     this.input.setEnabled(true);
@@ -221,7 +217,12 @@ export default class MainGameScene {
         this.lastShortcutMessage = '前方が空きマスではないため配置できません';
         return;
       }
+      if (this.player.skillEnergy <= 0) {
+        this.lastShortcutMessage = 'スキルエナジーが不足しています。青いポーションを集めよう';
+        return;
+      }
       this.recordUndo();
+      this.player.skillEnergy -= 1;
       this.blockIdSequence += 1;
       this.blocks.push({
         ...this.clipboard,
@@ -291,6 +292,11 @@ export default class MainGameScene {
     this.player.x = (stage.start.x + 0.5) * this.tileSize;
     this.player.y = (stage.start.y + 0.5) * this.tileSize;
     this.player.facing = stage.start.facing;
+    const initialPotions = Number.isInteger(stage.initialSkillPotions) ? stage.initialSkillPotions : 0;
+    this.inventory.skillPotion = initialPotions;
+    this.inventory.lifePotion = 0;
+    this.player.skillEnergy = 1 + initialPotions * 2;
+    this.player.hp = this.player.maxHp;
   }
 
   getTargetTile() {
@@ -342,6 +348,7 @@ export default class MainGameScene {
       clipboard: this.clipboard ? { ...this.clipboard } : null,
       shortcutGateOpen: this.shortcutGateOpen,
       openColors: [...this.openColors],
+      skillEnergy: this.player.skillEnergy,
     };
   }
 
@@ -353,6 +360,7 @@ export default class MainGameScene {
     this.clipboard = state.clipboard ? { ...state.clipboard } : null;
     this.shortcutGateOpen = state.shortcutGateOpen;
     this.openColors = new Set(state.openColors);
+    this.player.skillEnergy = state.skillEnergy;
     this.rebuildLaserBeams();
   }
 
@@ -555,8 +563,6 @@ export default class MainGameScene {
     window.removeEventListener('keydown', this.handleRetryKeyDown);
     this.bossQuiz.stop();
     this.player.hp = this.player.maxHp;
-    this.player.skillEnergy = 1;
-    this.inventory.skillPotion = 0;
     this.inventory.lifePotion = 0;
     this.stage = this.stageManager.reset();
     this.loadStage(this.stage);
