@@ -87,11 +87,16 @@
     {
       "id": "block-1",
       "name": "木箱",
+      "kind": "normal",
       "x": 5,
       "y": 12,
       "color": "#b57d50"
     }
   ],
+  "colorSwitches": [],
+  "colorWalls": [],
+  "lasers": [],
+  "magma": [],
   "goal": {
     "x": 21,
     "y": 8
