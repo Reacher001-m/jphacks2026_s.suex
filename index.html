@@ -9,7 +9,35 @@
     <script type="module" src="./src/main.js"></script>
   </head>
   <body>
-    <main class="game-shell">
+    <main id="home-screen" class="home-shell">
+      <section class="home-card" aria-labelledby="home-title">
+        <p class="eyebrow"><span class="eyebrow-dot"></span>KEYBOARD TRAINING • 2D DUNGEON</p>
+        <h1 id="home-title">ショートカット<span>・ダンジョン</span></h1>
+        <p class="home-lead">キーボードショートカットを使って、パズル迷路を攻略しよう。</p>
+
+        <div class="login-options" aria-label="プレイ方法を選択">
+          <button class="login-choice google-choice" type="button" disabled aria-describedby="google-note">
+            <span class="google-mark" aria-hidden="true">G</span>
+            Google でログイン
+            <span class="coming-soon">準備中</span>
+          </button>
+          <p id="google-note" class="option-note">ログインとセーブデータ同期は、Supabase連携後に利用できます。</p>
+
+          <button id="guest-play-button" class="login-choice guest-choice" type="button" aria-pressed="false">
+            <span aria-hidden="true">⌁</span>
+            ゲストでプレイ
+          </button>
+          <p class="option-note">すぐに遊べます。セーブデータ機能は今後追加予定です。</p>
+        </div>
+
+        <button id="start-game-button" class="start-game-button" type="button" disabled>
+          ゲームを開始する <span aria-hidden="true">→</span>
+        </button>
+        <p id="selection-status" class="selection-status" aria-live="polite">プレイ方法を選択してください</p>
+      </section>
+    </main>
+
+    <main id="game-screen" class="game-shell" hidden>
       <header class="page-heading">
         <div class="heading-copy">
           <p class="eyebrow"><span class="eyebrow-dot"></span>KEYBOARD TRAINING • 2D DUNGEON</p>
